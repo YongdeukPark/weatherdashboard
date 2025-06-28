@@ -51,5 +51,8 @@ python3 -m unittest test_weather_info.py
 - The only dashboard UI is the dark tab dashboard at `/dashboard`.
 - You can easily add or remove cities in the code.
 
+## Reference
+- OpenWeatherMap API: https://openweathermap.org/api
+
 ## License
 MIT
