@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>전국 광역시/특례시 날씨 대시보드</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #e5e7eb; margin: 0; padding: 0; }
+        .dark-bg { background: #181c24; color: #e5e7eb; min-height: 100vh; }
+        h1 { background: #232a36; color: #fff; margin: 0; padding: 24px 0 18px 0; text-align: center; letter-spacing: 1px; font-size: 2.2em; font-weight: 700; box-shadow: 0 2px 8px #232a36; }
+        .container { max-width: 1200px; margin: 30px auto; background: #232a36; border-radius: 12px; box-shadow: 0 2px 12px #111827; padding: 30px; display: flex; }
+        .sidebar { width: 200px; background: #181c24; border-radius: 10px; margin-right: 30px; padding: 20px 0; display: flex; flex-direction: column; align-items: center; }
+        .tab-btn { width: 90%; background: #232a36; color: #e5e7eb; border: none; border-radius: 6px; padding: 14px 0; margin: 8px 0; font-size: 1.1em; cursor: pointer; transition: background 0.2s; }
+        .tab-btn.active, .tab-btn:hover { background: #2563eb; color: #fff; }
+        .main-content { flex: 1; }
+        #map { height: 400px; width: 100%; margin-bottom: 30px; border-radius: 12px; }
+        .city-title { font-size: 1.3em; font-weight: 700; color: #60a5fa; margin-bottom: 8px; letter-spacing: 0.5px; }
+        .error { color: #e11d48; font-weight: 500; margin-bottom: 10px; }
+        .current-table, .forecast-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .current-table th, .current-table td, .forecast-table th, .forecast-table td { border: 1px solid #374151; padding: 6px 8px; text-align: center; }
+        .current-table th { background: #2563eb; color: #fff; font-weight: 700; }
+        .forecast-table th { background: #374151; color: #fff; font-weight: 700; }
+        .forecast-table tr:nth-child(even) { background: #232a36; }
+        .forecast-table tr:nth-child(odd) { background: #181c24; }
+        .report-box { background: #232a36; border-radius: 10px; box-shadow: 0 2px 8px #111827; padding: 24px; margin-top: 20px; color: #e5e7eb; }
+        .select-city { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #374151; background: #181c24; color: #e5e7eb; font-size: 1em; margin-bottom: 20px; }
+        @media (max-width: 900px) { .container { flex-direction: column; } .sidebar { width: 100%; flex-direction: row; margin-bottom: 20px; } .tab-btn { margin: 0 8px; } }
+    </style>
+</head>
+<body class="dark-bg">
+    <h1>전국 광역시/특례시 날씨 대시보드</h1>
+    <div class="container">
+        <div class="sidebar">
+            <button class="tab-btn active" onclick="showTab('home')">Home</button>
+            <button class="tab-btn" onclick="showTab('report')">Report</button>
+        </div>
+        <div class="main-content">
+            <div id="tab-home">
+                <div id="map"></div>
+                <div id="city-weather">
+                    <div style="color:#aaa; text-align:center;">지도의 도시를 클릭하면 상세 날씨 정보가 아래에 표시됩니다.</div>
+                </div>
+            </div>
+            <div id="tab-report" style="display:none;">
+                <select id="city-select" class="select-city">
+                    <option value="">도시를 선택하세요</option>
+                    <option>서울</option><option>부산</option><option>대구</option><option>인천</option><option>광주</option><option>대전</option><option>울산</option><option>세종</option><option>수원</option><option>용인</option><option>고양</option><option>창원</option><option>성남</option><option>부천</option><option>화성</option><option>남양주</option><option>전주</option><option>천안</option><option>안산</option><option>안양</option>
+                </select>
+                <div id="report-box" class="report-box"></div>
+            </div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 탭 전환
+        function showTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.main-content > div').forEach(div => div.style.display = 'none');
+            document.querySelector(`.tab-btn[onclick*="${tab}"]`).classList.add('active');
+            document.getElementById('tab-' + tab).style.display = '';
+        }
+        // 지도 및 마커
+        var map = L.map('map').setView([36.5, 127.8], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        fetch('/dashboard/map_data')
+            .then(res => res.json())
+            .then(data => {
+                data.forEach(city => {
+                    var marker = L.marker([city.lat, city.lon]).addTo(map);
+                    marker.on('click', function() {
+                        fetch(`/dashboard/city_weather?name=${encodeURIComponent(city.name)}`)
+                            .then(res => res.json())
+                            .then(info => showCityWeather(info));
+                    });
+                });
+            });
+        function showCityWeather(info) {
+            const el = document.getElementById('city-weather');
+            if(info.error) {
+                el.innerHTML = `<div class='error'>${info.error}</div>`;
+                return;
+            }
+            let html = `<div class='city-title'>${info.name}</div>`;
+            html += `<table class='current-table'><tr><th>현재 기온</th><th>체감</th><th>날씨</th><th>강수량(1h)</th><th>풍속</th><th>습도</th><th>기압</th></tr>`;
+            html += `<tr><td>${info.current.temp}°C</td><td>${info.current.feels_like}°C</td><td>${info.current.weather}</td><td>${info.current.rain}mm</td><td>${info.current.wind} m/s</td><td>${info.current.humidity}%</td><td>${info.current.pressure} hPa</td></tr></table>`;
+            html += `<table class='forecast-table'><tr><th>날짜</th><th>예보 기온</th><th>날씨</th><th>강수량(3h)</th><th>풍속</th></tr>`;
+            info.forecast.forEach(day => {
+                html += `<tr><td>${day.date}</td><td>${day.temp}°C</td><td>${day.weather}</td><td>${day.rain}mm</td><td>${day.wind} m/s</td></tr>`;
+            });
+            html += `</table>`;
+            el.innerHTML = html;
+        }
+        // Report 탭: 도시 선택 시 리포트 표시
+        document.getElementById('city-select').addEventListener('change', function() {
+            const city = this.value;
+            if(!city) { document.getElementById('report-box').innerHTML = ''; return; }
+            fetch(`/dashboard/city_weather?name=${encodeURIComponent(city)}`)
+                .then(res => res.json())
+                .then(info => showReport(info));
+        });
+        function showReport(info) {
+            const el = document.getElementById('report-box');
+            if(info.error) {
+                el.innerHTML = `<div class='error'>${info.error}</div>`;
+                return;
+            }
+            let html = `<div class='city-title'>${info.name} 상세 리포트</div>`;
+            html += `<ul style='line-height:2;'>`;
+            html += `<li><b>현재 기온:</b> ${info.current.temp}°C (체감: ${info.current.feels_like}°C)</li>`;
+            html += `<li><b>날씨:</b> ${info.current.weather}</li>`;
+            html += `<li><b>강수량(1h):</b> ${info.current.rain}mm</li>`;
+            html += `<li><b>풍속:</b> ${info.current.wind} m/s</li>`;
+            html += `<li><b>습도:</b> ${info.current.humidity}%</li>`;
+            html += `<li><b>기압:</b> ${info.current.pressure} hPa</li>`;
+            html += `<li><b>예보:</b></li>`;
+            html += `<ul>`;
+            info.forecast.forEach(day => {
+                html += `<li>${day.date}: ${day.temp}°C, ${day.weather}, 강수량: ${day.rain}mm, 풍속: ${day.wind} m/s</li>`;
+            });
+            html += `</ul></ul>`;
+            el.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
